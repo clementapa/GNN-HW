@@ -1,19 +1,18 @@
 import argparse
 from os import path
 
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
 import torch
 import torch.nn.functional as F
 from dgl import batch
 from dgl.data.ppi import LegacyPPIDataset
-from dgl.nn.pytorch import GraphConv
-from dgl.nn.pytorch import GATConv
+from dgl.nn.pytorch import GATConv, GraphConv
 from sklearn.metrics import f1_score
 from torch import nn, optim
 from torch.utils.data import DataLoader
 
+import wandb
 
 MODEL_STATE_FILE = path.join(path.dirname(path.abspath(__file__)), "model_state.pth")
 
@@ -37,6 +36,48 @@ class BasicGraphModel(nn.Module):
 
         return outputs
 
+class GraphAttentionModel(nn.Module):
+
+    def __init__(self, g, n_layers, input_size, hidden_size, output_size, num_heads, nonlinearity):
+        super().__init__()
+
+        self.g = g
+        self.layers = nn.ModuleList()
+        self.layers.append(GATConv(input_size, hidden_size, num_heads, activation=nonlinearity))
+        for i in range(n_layers - 1):
+            self.layers.append(GATConv(hidden_size*num_heads, hidden_size, num_heads, activation=nonlinearity))
+        self.layers.append(GATConv(hidden_size*num_heads, output_size, 1))
+
+    def forward(self, inputs):
+        outputs = inputs
+        for i, layer in enumerate(self.layers):
+            outputs = layer(self.g, outputs)
+            outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
+
+        return outputs
+
+class GraphAttentionNetwork(nn.Module):
+
+    def __init__(self, g, n_layers, input_size, hidden_size, output_size):
+        super().__init__()
+
+        self.g = g
+        self.layers = nn.ModuleList()
+        self.layers.append(GATConv(input_size, hidden_size, 4, activation=F.elu))
+        for i in range(n_layers - 1):
+            self.layers.append(GATConv(hidden_size*4, hidden_size, 4, activation=F.elu))
+        self.layers.append(GATConv(hidden_size*4, output_size, 6, activation=None))
+
+    def forward(self, inputs):
+        outputs = inputs
+        for i, layer in enumerate(self.layers):
+            outputs = layer(self.g, outputs)
+            if i != len(self.layers)-1:
+                outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
+        
+        outputs = torch.mean(outputs, dim=1)
+        return outputs
+
 def main(args):
 
     # load dataset and create dataloader
@@ -50,16 +91,35 @@ def main(args):
 
     ########### Replace this model with your own GNN implemented class ################################
 
-    model = BasicGraphModel(g=train_dataset.graph, n_layers=2, input_size=n_features,
-                            hidden_size=256, output_size=n_classes, nonlinearity=F.elu).to(device)
+    # baseline_model = BasicGraphModel(g=train_dataset.graph, n_layers=2, input_size=n_features,
+    #                         hidden_size=256, output_size=n_classes, nonlinearity=F.elu).to(device)
+
+    # model = GraphAttentionModel(g=train_dataset.graph, n_layers=2, input_size=n_features,
+    #                             hidden_size=256, output_size=n_classes, num_heads=6, nonlinearity=F.leaky_relu).to(device)
+
+    model = GraphAttentionNetwork(g=train_dataset.graph, n_layers=2, input_size=n_features,
+                                    hidden_size=256, output_size=n_classes).to(device)
 
     ###################################################################################################
 
+    lr = 0.005
     loss_fcn = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    config = {
+            "learning_rate": lr,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "optimizer": optimizer
+            }
 
     # train
     if args.mode == "train":
+        
+        wandb.login()
+        wandb.init(project="GNN-HW", entity="dlip_gnn", config=config)
+        wandb.watch(model)
+
         train(model, loss_fcn, device, optimizer, train_dataloader, test_dataset)
         torch.save(model.state_dict(), MODEL_STATE_FILE)
 
@@ -75,6 +135,7 @@ def train(model, loss_fcn, device, optimizer, train_dataloader, test_dataset):
 
     f1_score_list = []
     epoch_list = []
+    best_f1 = 0
 
     for epoch in range(args.epochs):
         model.train()
@@ -95,6 +156,7 @@ def train(model, loss_fcn, device, optimizer, train_dataloader, test_dataset):
             losses.append(loss.item())
         loss_data = np.array(losses).mean()
         print("Epoch {:05d} | Loss: {:.4f}".format(epoch + 1, loss_data))
+        wandb.log({"train_loss": loss_data})
 
         if epoch % 5 == 0:
             scores = []
@@ -108,8 +170,16 @@ def train(model, loss_fcn, device, optimizer, train_dataloader, test_dataset):
                 f1_score_list.append(score)
                 epoch_list.append(epoch)
             print("F1-Score: {:.4f} ".format(np.array(scores).mean()))
+            wandb.log({"test_F1-Score": np.array(scores).mean()})
 
-    # plot_f1_score(epoch_list, f1_score_list)
+            if best_f1 <= np.array(scores).mean():
+                best_f1 = np.array(scores).mean()
+                torch.save(model.state_dict(), path.join(wandb.run.dir, "model_state.pth"))
+                wandb.save(path.join(wandb.run.dir, "model_state.pth"))
+
+        wandb.log({"Epoch": epoch})
+
+    plot_f1_score(epoch_list, f1_score_list)
 
 def test(model, loss_fcn, device, test_dataloader):
     test_scores = []
