@@ -36,26 +36,6 @@ class BasicGraphModel(nn.Module):
 
         return outputs
 
-class GraphAttentionModel(nn.Module):
-
-    def __init__(self, g, n_layers, input_size, hidden_size, output_size, num_heads, nonlinearity):
-        super().__init__()
-
-        self.g = g
-        self.layers = nn.ModuleList()
-        self.layers.append(GATConv(input_size, hidden_size, num_heads, activation=nonlinearity))
-        for i in range(n_layers - 1):
-            self.layers.append(GATConv(hidden_size*num_heads, hidden_size, num_heads, activation=nonlinearity))
-        self.layers.append(GATConv(hidden_size*num_heads, output_size, 1))
-
-    def forward(self, inputs):
-        outputs = inputs
-        for i, layer in enumerate(self.layers):
-            outputs = layer(self.g, outputs)
-            outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
-
-        return outputs
-
 class GraphAttentionNetwork(nn.Module):
 
     def __init__(self, g, n_layers, input_size, hidden_size, output_size):
@@ -94,9 +74,6 @@ def main(args):
     # baseline_model = BasicGraphModel(g=train_dataset.graph, n_layers=2, input_size=n_features,
     #                         hidden_size=256, output_size=n_classes, nonlinearity=F.elu).to(device)
 
-    # model = GraphAttentionModel(g=train_dataset.graph, n_layers=2, input_size=n_features,
-    #                             hidden_size=256, output_size=n_classes, num_heads=6, nonlinearity=F.leaky_relu).to(device)
-
     model = GraphAttentionNetwork(g=train_dataset.graph, n_layers=2, input_size=n_features,
                                     hidden_size=256, output_size=n_classes).to(device)
 
@@ -110,7 +87,8 @@ def main(args):
             "learning_rate": lr,
             "epochs": args.epochs,
             "batch_size": args.batch_size,
-            "optimizer": optimizer
+            "optimizer": optimizer,
+            "model": model
             }
 
     # train
