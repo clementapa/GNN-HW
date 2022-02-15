@@ -48,7 +48,7 @@ class GraphAttentionNetwork(nn.Module):
             self.layers.append(GATConv(hidden_size*16, hidden_size, 16, activation=F.elu))
         self.layers.append(GATConv(hidden_size*16, output_size, 16, activation=None))
 
-        self.layers.append(nn.Linear(output_size*16, output_size))
+        self.fc = nn.Linear(output_size*16, output_size)
 
     def forward(self, inputs):
         outputs = inputs
@@ -58,6 +58,8 @@ class GraphAttentionNetwork(nn.Module):
             #     outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
         
         # outputs = torch.mean(outputs, dim=1)
+        outputs = self.fc(outputs)
+
         return outputs
 
 def main(args):
