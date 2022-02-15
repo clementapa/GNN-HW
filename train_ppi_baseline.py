@@ -43,19 +43,21 @@ class GraphAttentionNetwork(nn.Module):
 
         self.g = g
         self.layers = nn.ModuleList()
-        self.layers.append(GATConv(input_size, hidden_size, 4, activation=F.elu))
+        self.layers.append(GATConv(input_size, hidden_size, 16, activation=F.elu))
         for i in range(n_layers - 1):
-            self.layers.append(GATConv(hidden_size*4, hidden_size, 4, activation=F.elu))
-        self.layers.append(GATConv(hidden_size*4, output_size, 6, activation=None))
+            self.layers.append(GATConv(hidden_size*16, hidden_size, 16, activation=F.elu))
+        self.layers.append(GATConv(hidden_size*16, output_size, 16, activation=None))
+
+        self.layers.append(nn.Linear(output_size*16, output_size))
 
     def forward(self, inputs):
         outputs = inputs
         for i, layer in enumerate(self.layers):
             outputs = layer(self.g, outputs)
-            if i != len(self.layers)-1:
-                outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
+            # if i != len(self.layers)-1:
+            #     outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
         
-        outputs = torch.mean(outputs, dim=1)
+        # outputs = torch.mean(outputs, dim=1)
         return outputs
 
 def main(args):
@@ -81,7 +83,8 @@ def main(args):
 
     lr = 0.005
     loss_fcn = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.04)
 
     config = {
             "learning_rate": lr,
