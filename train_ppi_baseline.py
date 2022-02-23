@@ -12,8 +12,6 @@ from sklearn.metrics import f1_score
 from torch import nn, optim
 from torch.utils.data import DataLoader
 
-import wandb
-
 MODEL_STATE_FILE = path.join(path.dirname(path.abspath(__file__)), "model_state.pth")
 
 
@@ -95,7 +93,8 @@ def main(args):
 
     # train
     if args.mode == "train":
-        
+        import wandb
+
         wandb.login()
         wandb.init(project="GNN-HW", entity="dlip_gnn", config=config)
         wandb.watch(model)
