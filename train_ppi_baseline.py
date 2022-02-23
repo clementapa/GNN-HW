@@ -54,12 +54,9 @@ class GraphAttentionNetwork(nn.Module):
         outputs = inputs
         for i, layer in enumerate(self.layers):
             outputs = layer(self.g, outputs)
-            # if i != len(self.layers)-1:
-            #     outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
+            outputs = outputs.view(-1, outputs.size(1)*outputs.size(2))
         
-        # outputs = torch.mean(outputs, dim=1)
         outputs = self.fc(outputs)
-
         return outputs
 
 def main(args):
@@ -71,7 +68,7 @@ def main(args):
     n_features, n_classes = train_dataset.features.shape[1], train_dataset.labels.shape[1]
 
     # create the model, loss function and optimizer
-    device = torch.device("cpu" if args.gpu < 0 else "cuda:" + str(args.gpu))
+    device = torch.device("cpu" if args.gpu < 0 else "cuda")
 
     ########### Replace this model with your own GNN implemented class ################################
 
