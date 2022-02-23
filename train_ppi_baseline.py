@@ -80,7 +80,7 @@ def main(args):
 
     ###################################################################################################
 
-    lr = 0.005
+    lr = 0.0008
     loss_fcn = nn.BCEWithLogitsLoss()
     # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.04)
@@ -104,7 +104,7 @@ def main(args):
         torch.save(model.state_dict(), MODEL_STATE_FILE)
 
     # import model from file
-    model.load_state_dict(torch.load(MODEL_STATE_FILE))
+    model.load_state_dict(torch.load(MODEL_STATE_FILE, map_location=device))
 
     # test the model
     test(model, loss_fcn, device, test_dataloader)
